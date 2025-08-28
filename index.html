@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>対戦型テニスゲーム - ロビー</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 16px; background:#000; color:#eee; }
+    #lobby, #game { max-width: 980px; margin: 0 auto; }
+    #participants { list-style: none; padding: 0; margin-top: 12px; }
+    .participant { display:flex; justify-content:space-between; align-items:center; padding:10px; border:1px solid #2a2a2a; border-radius:8px; margin-bottom:8px; background:#0f0f0f; }
+    button { padding:8px 12px; background:#1f6feb; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+    button:hover { background:#2a7df0; }
+    h1, h2 { color:#eaeaea; }
+    #gameLayout { display:flex; gap: 12px; align-items:flex-start; margin-top: 12px; }
+    #gameCanvas { background:#0b7442; display:block; border:1px solid #333; }
+    .score-panel { width: 200px; background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px; color: #eee; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .score-panel .score-header { padding: 10px 12px; color: #ffdd57; font-weight: 700; border-bottom: 1px solid #222; letter-spacing: 0.5px; }
+    .score-panel .row { display:flex; align-items:center; justify-content: space-between; padding: 12px; }
+    .score-panel .divider { height:1px; background: #222; margin: 0 8px; }
+    .score-panel .name { flex: 1 1 auto; margin-left: 8px; color: #bbb; font-size: 14px; }
+    .score-panel .score { font-size: 32px; color: #fff; font-weight: 800; min-width: 30px; text-align: right; }
+    .serve-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; display:inline-block; }
+    .serve-dot.active { background: #ffdd57; box-shadow: 0 0 8px rgba(255,221,87,0.8); }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <div id="lobby">
+    <h1>対戦型テニスゲーム — ロビー</h1>
+
+    <div>
+      <label>ユーザ名: <input id="username" placeholder="名前を入力"/></label>
+      <button id="enterLobby">ロビーに入る</button>
+    </div>
+
+    <div id="me" style="margin-top:10px; color:#555">未入室</div>
+
+    <h2 style="margin-top:16px">参加者（LAN）</h2>
+    <ul id="participants">
+      <!-- 動的に生成 -->
+    </ul>
+
+    <div id="logs" style="margin-top:12px; color:#666; font-size:13px"></div>
+  </div>
+
+  <div id="game" class="hidden">
+    <h1>対戦画面</h1>
+    <div id="gameLayout">
+      <canvas id="gameCanvas" width="500" height="700"></canvas>
+      <div id="scorePanel" class="score-panel">
+        <div class="score-header">SCORE</div>
+        <div class="row top">
+          <span class="serve-dot" id="serveTop"></span>
+          <span class="name" id="scoreTopName">Opponent</span>
+          <span class="score" id="scoreTopVal">0</span>
+        </div>
+        <div class="divider"></div>
+        <div class="row bottom">
+          <span class="serve-dot" id="serveBot"></span>
+          <span class="name" id="scoreBotName">You</span>
+          <span class="score" id="scoreBotVal">0</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <button id="leaveGame">ロビーへ戻る</button>
+    </div>
+  </div>
+
+  <script src="src/app.js"></script>
+</body>
+</html>

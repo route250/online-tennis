@@ -1,0 +1,18 @@
+{
+  "name": "lan-tennis-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "対戦型テニスゲームのプロトタイプ（LANロビー＋簡易ゲーム）",
+  "scripts": {
+    "start": "npx http-server . -p 8080",
+    "serve": "npx http-server . -p 8080",
+    "dev": "npx http-server . -p 8080",
+    "test": "echo \"No tests\" && exit 0"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.1.0",
+    "ws": "^8.18.3"
+  }
+}
