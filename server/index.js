@@ -5,13 +5,59 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const os = require('os');
 const WebSocket = require('ws');
+let QRCode;
+try { QRCode = require('qrcode'); } catch (_) { QRCode = null; }
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
+const BIND_HOST = process.env.HOST || '0.0.0.0';
+
+function detectLanIPv4() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const ni of nets[name] || []) {
+      if (ni.family === 'IPv4' && !ni.internal) return ni.address;
+    }
+  }
+  return 'localhost';
+}
+
+function computeServerURLs() {
+  const publicHost = (BIND_HOST === '0.0.0.0' || BIND_HOST === '::') ? detectLanIPv4() : BIND_HOST;
+  const bindHost = BIND_HOST;
+  const httpURL = `http://${bindHost}:${PORT}`;
+  const httpURLPublic = `http://${publicHost}:${PORT}`;
+  const wsURL = `ws://${bindHost}:${PORT}/ws`;
+  const wsURLPublic = `ws://${publicHost}:${PORT}/ws`;
+  return { bindHost, publicHost, port: PORT, httpURL, httpURLPublic, wsURL, wsURLPublic };
+}
 
 const app = express();
 // Serve client assets from /client
 app.use(express.static(path.join(__dirname, '..', 'client')));
+
+// Expose server info for client to render QR and URL
+app.get('/server-info', (req, res) => {
+  res.json(computeServerURLs());
+});
+
+// Generate QR as SVG for the given URL (or default to httpURLPublic)
+app.get('/qr.svg', async (req, res) => {
+  const { httpURLPublic } = computeServerURLs();
+  const target = (req.query && req.query.url) ? String(req.query.url) : httpURLPublic;
+  try {
+    if (!QRCode) throw new Error('qrcode module not installed');
+    const svg = await QRCode.toString(target, { type: 'svg', margin: 1, scale: 4, color: { dark: '#ffffff', light: '#00000000' } });
+    res.type('image/svg+xml').send(svg);
+  } catch (err) {
+    // Fallback: simple SVG with text
+    const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const text = esc(target);
+    const fallback = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><rect width="100%" height="100%" fill="#111"/><text x="90" y="90" fill="#fff" font-size="12" text-anchor="middle" dominant-baseline="middle">QR unavailable</text><text x="90" y="160" fill="#aaa" font-size="10" text-anchor="middle">${text}</text></svg>`;
+    res.type('image/svg+xml').send(fallback);
+  }
+});
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
@@ -87,7 +133,7 @@ function startRoomGame(room) {
   }
 
   // simulation loop ~20Hz
-  const BALL_SPEED_MULT = 2; // approximate 2x speed
+  const BALL_SPEED_MULT = 2; // simulation scale factor (keep baseline speed)
   room.gameInterval = setInterval(() => {
     const s = room.gameState;
     if (!s || !s.running) return;
@@ -220,14 +266,14 @@ function startRoomGame(room) {
           // incorporate paddle swing and contact offset
           const pV = p._vx || 0; // px per tick
           const offset = (s.ball.x - (p.x + p.w / 2)) / (p.w / 2);
-          s.ball.vx += offset * 0.6 + pV * 0.5;
+          s.ball.vx += offset * 0.6 + pV * 0.7;
           // increase vertical speed depending on paddle swing
           const baseVy = Math.abs(s.ball.vy);
-          const speedUp = Math.min(4, Math.abs(pV) * 0.3);
-          const newVy = Math.min(8, Math.max(2, baseVy + speedUp));
+          const speedUp = Math.min(6, Math.abs(pV) * 0.45);
+          const newVy = Math.min(12, Math.max(2.5, baseVy + speedUp));
           s.ball.vy = newVy; // top paddle -> ball goes down
           // clamp horizontal speed
-          s.ball.vx = Math.max(-6, Math.min(6, s.ball.vx));
+          s.ball.vx = Math.max(-10, Math.min(10, s.ball.vx));
           // push ball out to avoid re-colliding next tick
           s.ball.y = p.y + p.h + s.ball.r + 1;
         }
@@ -238,12 +284,12 @@ function startRoomGame(room) {
         if ((s.ball.vy > 0) && (crossed || overlappingNow)) {
           const pV = p._vx || 0;
           const offset = (s.ball.x - (p.x + p.w / 2)) / (p.w / 2);
-          s.ball.vx += offset * 0.6 + pV * 0.5;
+          s.ball.vx += offset * 0.6 + pV * 0.7;
           const baseVy = Math.abs(s.ball.vy);
-          const speedUp = Math.min(4, Math.abs(pV) * 0.3);
-          const newVy = Math.min(8, Math.max(2, baseVy + speedUp));
+          const speedUp = Math.min(6, Math.abs(pV) * 0.45);
+          const newVy = Math.min(12, Math.max(2.5, baseVy + speedUp));
           s.ball.vy = -newVy; // bottom paddle -> ball goes up
-          s.ball.vx = Math.max(-6, Math.min(6, s.ball.vx));
+          s.ball.vx = Math.max(-10, Math.min(10, s.ball.vx));
           s.ball.y = p.y - s.ball.r - 1;
         }
       }
@@ -328,9 +374,9 @@ function launchServe(s, serverId) {
   if (!p) return;
   const pV = p._vx || 0; // px per tick
   const dirDown = (p.y < s.height / 2); // top paddle serves downward
-  const baseVy = 2.5 + Math.min(6, Math.abs(pV)) * 0.4; // boost by swing
-  let vx = pV * 0.6 + (Math.random() - 0.5) * 0.6; // small randomness
-  vx = Math.max(-4, Math.min(4, vx));
+  const baseVy = 3 + Math.min(8, Math.abs(pV)) * 0.5; // stronger boost by swing
+  let vx = pV * 0.8 + (Math.random() - 0.5) * 0.6; // small randomness
+  vx = Math.max(-6, Math.min(6, vx));
   const vy = dirDown ? baseVy : -baseVy;
   s.ball.vx = vx;
   s.ball.vy = vy;
@@ -587,7 +633,8 @@ setInterval(() => {
   if (changed) broadcastParticipants();
 }, 5000);
 
-server.listen(PORT, () => {
-  console.log(`Server listening on http://0.0.0.0:${PORT}`);
-  console.log(`WebSocket endpoint ws://<host>:${PORT}/ws`);
+server.listen(PORT, BIND_HOST, () => {
+  const info = computeServerURLs();
+  console.log(`Server listening on ${info.httpURL} (public: ${info.httpURLPublic})`);
+  console.log(`WebSocket endpoint ${info.wsURL} (public: ${info.wsURLPublic})`);
 });

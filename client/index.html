@@ -2,22 +2,34 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>対戦型テニスゲーム - ロビー</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="lobby">
-    <h1>対戦型テニスゲーム — ロビー</h1>
+    <h1>オンラインテニス</h1>
 
-    <div>
-      <label>ユーザ名: <input id="username" placeholder="名前を入力"/></label>
-      <button id="enterLobby">ロビーに入る</button>
+    <div id="qrBox" class="qr-box">
+      <img id="qrImage" class="qr-img" alt="サーバURLのQRコード" />
+      <div class="qr-meta">
+        <div class="qr-title">このURLで参加</div>
+        <div id="serverUrl" class="qr-url"></div>
+        <button id="copyUrl" class="ghost small">URLをコピー</button>
+      </div>
     </div>
 
-    <div id="me" style="margin-top:10px; color:#555">未入室</div>
+    <div id="loginRow" class="login-row">
+      <input id="username" class="input" placeholder="ユーザ名を入力"/>
+      <button id="enterLobby" class="primary">ロビーに入る</button>
+    </div>
 
-    <h2 style="margin-top:16px">参加者（LAN）</h2>
+    <div id="lobbyUserRow" class="lobby-bar hidden">
+      <div class="me-badge">👤 <span id="me">未入室</span></div>
+      <button id="leaveLobby" class="ghost small" title="ロビーから退出">退出</button>
+    </div>
+
+    <h2 class="section-title">対戦相手</h2>
     <ul id="participants">
       <!-- 動的に生成 -->
     </ul>
@@ -30,7 +42,10 @@
       <canvas id="gameCanvas" width="500" height="700"></canvas>
       <div id="sideColumn">
         <div id="scorePanel" class="score-panel">
-          <div class="score-header">SCORE</div>
+          <div class="score-header">
+            <span class="score-title">SCORE</span>
+            <button id="leaveGame" class="mini-btn" title="ロビーへ戻る">ロビーへ</button>
+          </div>
           <div class="row top">
             <span class="serve-dot" id="serveTop"></span>
             <span class="name" id="scoreTopName">Opponent</span>
@@ -42,9 +57,6 @@
             <span class="name" id="scoreBotName">You</span>
             <span class="score" id="scoreBotVal">0</span>
           </div>
-        </div>
-        <div class="side-actions">
-          <button id="leaveGame">ロビーへ戻る</button>
         </div>
       </div>
     </div>

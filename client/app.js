@@ -8,12 +8,19 @@
   const usernameInput = $('username');
   const enterBtn = $('enterLobby');
   const meLabel = $('me');
+  const loginRow = document.getElementById('loginRow');
+  const lobbyUserRow = document.getElementById('lobbyUserRow');
+  const leaveLobbyBtn = document.getElementById('leaveLobby');
   const participantsList = $('participants');
   const logs = $('logs');
   const lobby = $('lobby');
   const gameScreen = $('game');
   const gameCanvas = $('gameCanvas');
   const leaveBtn = $('leaveGame');
+  // QR elements
+  const qrImage = document.getElementById('qrImage');
+  const serverUrlEl = document.getElementById('serverUrl');
+  const copyUrlBtn = document.getElementById('copyUrl');
   // Scoreboard DOM
   const scoreTopName = $('scoreTopName');
   const scoreTopVal = $('scoreTopVal');
@@ -21,15 +28,20 @@
   const scoreBotVal = $('scoreBotVal');
   const serveTop = $('serveTop');
   const serveBot = $('serveBot');
+  const scorePanelEl = document.getElementById('scorePanel');
 
   // State
   let ws = null;
+  let intendedDisconnect = false; // true when user chose to leave lobby
   let myId = null;
   let username = null;
   let participants = {}; // id -> { id, name, lastSeen }
   let currentRoom = null; // { roomId, players }
   let serveId = null;
   let servePending = false; // waiting for serve click
+  let serveMsgVisible = false; // center message visible before serve
+  let lastServePaddleX = null; // track server paddle movement to hide message
+  let lastRunning = null; // track running->stopped transition
   let lastSentX = null;
 
   // ゲーム状態（サーバ由来・ローカル補完）
@@ -61,6 +73,7 @@
 
   function connectWs() {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    intendedDisconnect = false;
     ws = new WebSocket(WS_URL);
 
     ws.addEventListener('open', () => {
@@ -78,12 +91,29 @@
     ws.addEventListener('close', () => {
       log('WebSocket 切断');
       stopHeartbeat();
-      setTimeout(connectWs, 1000);
+      // reconnect only if not intentionally disconnected by user
+      if (!intendedDisconnect) setTimeout(connectWs, 1000);
     });
 
     ws.addEventListener('error', (e) => {
       console.warn('WebSocket error', e);
     });
+  }
+
+  // Fetch server info (host/port) and render QR/URL
+  async function initServerInfo() {
+    let info = null;
+    try {
+      const res = await fetch('/server-info', { cache: 'no-store' });
+      if (res.ok) info = await res.json();
+    } catch (e) { /* ignore */ }
+    const origin = window.location.origin;
+    const url = (info && info.httpURLPublic) ? info.httpURLPublic : origin;
+    if (serverUrlEl) serverUrlEl.textContent = url;
+    if (qrImage) { qrImage.src = `/qr.svg?url=${encodeURIComponent(url)}`; }
+    if (copyUrlBtn) copyUrlBtn.onclick = async () => {
+      try { await navigator.clipboard.writeText(url); log('URLをコピーしました'); } catch (e) { log('クリップボードにコピーできませんでした'); }
+    };
   }
 
   function safeSend(obj) {
@@ -101,6 +131,7 @@
       list.forEach(p => { participants[p.id] = { id: p.id, name: p.name || '', lastSeen: p.lastSeen }; });
       renderParticipants();
       log(`CONNECT_ACK 受信. id=${myId}`);
+      updateLobbyHeaderUI();
       return;
     }
 
@@ -110,6 +141,7 @@
       list.forEach(p => { participants[p.id] = { id: p.id, name: p.name || '', lastSeen: p.lastSeen }; });
       renderParticipants();
       updateScorePanel();
+      updateLobbyHeaderUI();
       return;
     }
 
@@ -138,9 +170,11 @@
       // serveId: players[0] が最初のサーブとする（サーバ設計に合わせる）
       serveId = currentRoom.players[0];
       servePending = true;
+      serveMsgVisible = true;
+      lastServePaddleX = null;
       log(`ROOM_CREATED: ${currentRoom.roomId} players=${currentRoom.players.join(',')}`);
       const serveName = participants[serveId] ? participants[serveId].name : serveId;
-      log(`最初は ${serveName} のサーブです`);
+      log(`${serveName} のサーブです`);
       // Prepare game screen but wait for GAME_STATE from server for paddle positions
       enterGameScreen();
       updateScorePanel();
@@ -170,8 +204,6 @@
       if (s.serveId) {
         serveId = s.serveId;
       }
-      updateScorePanel();
-
       // If game not running and we have a room, keep serve pending (show message)
       if (!gameState.running && currentRoom) {
         servePending = true;
@@ -179,7 +211,43 @@
       } else {
         servePending = false;
       }
-
+      // Detect transition from running -> stopped (new serve) to re-show message on subsequent serves
+      if (lastRunning === null) {
+        lastRunning = gameState.running;
+      } else {
+        if (lastRunning && !gameState.running) {
+          serveMsgVisible = true;
+          if (s.paddles && serveId && s.paddles[serveId]) {
+            lastServePaddleX = s.paddles[serveId].x;
+          } else {
+            lastServePaddleX = null;
+          }
+        }
+        lastRunning = gameState.running;
+      }
+      // Track server paddle movement during pre-serve to hide message (applies to both clients)
+      if (servePending && s.paddles && serveId && s.paddles[serveId]) {
+        const curX = s.paddles[serveId].x;
+        if (lastServePaddleX === null) lastServePaddleX = curX;
+        else if (typeof curX === 'number' && Math.abs(curX - lastServePaddleX) >= 1) {
+          serveMsgVisible = false;
+          if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
+          lastServePaddleX = curX;
+        }
+      }
+      if (!servePending) { serveMsgVisible = false; }
+      // reflect servePending to score panel emphasis/compact
+      if (scorePanelEl) {
+        if (servePending && serveMsgVisible) {
+          scorePanelEl.classList.add('serve');
+          scorePanelEl.classList.remove('compact');
+        } else {
+          scorePanelEl.classList.remove('serve');
+          scorePanelEl.classList.add('compact');
+        }
+      }
+      // Update scoreboard DOM after state is settled
+      updateScorePanel();
       return;
     }
 
@@ -195,6 +263,22 @@
       updateScorePanel();
       return;
     }
+  }
+
+  // Update lobby header (login vs. user bar) depending on join status
+  function updateLobbyHeaderUI() {
+    try {
+      const joinedName = (myId && participants[myId] && participants[myId].name) ? participants[myId].name : '';
+      const isJoined = !!joinedName;
+      if (isJoined) {
+        if (meLabel) meLabel.textContent = `ユーザ: ${joinedName}`;
+        if (loginRow) loginRow.classList.add('hidden');
+        if (lobbyUserRow) lobbyUserRow.classList.remove('hidden');
+      } else {
+        if (lobbyUserRow) lobbyUserRow.classList.add('hidden');
+        if (loginRow) loginRow.classList.remove('hidden');
+      }
+    } catch (e) { /* noop */ }
   }
 
   // Heartbeat
@@ -242,14 +326,36 @@
       return;
     }
     username = usernameInput.value.trim();
-    meLabel.textContent = `あなた: ${username}`;
+    meLabel.textContent = `ユーザ: ${username}`;
     log(`ロビーに入室しました（${username}）`);
+    try { usernameInput.blur(); document.activeElement && document.activeElement.blur && document.activeElement.blur(); } catch (e) {}
     connectWs();
     // JOIN_LOBBY を送る（name を登録）— 少し遅らせて id を受け取ってから
     setTimeout(() => {
       safeSend({ type: 'JOIN_LOBBY', senderId: myId, payload: { name: username } });
     }, 300);
+    // Switch to lobby UI
+    if (loginRow) loginRow.classList.add('hidden');
+    if (lobbyUserRow) lobbyUserRow.classList.remove('hidden');
+    // iOSでズームが残るのを軽減（若干のスクロールリセット）
+    try { setTimeout(() => window.scrollTo(0, 0), 50); } catch (e) {}
   });
+
+  // ロビー退出
+  function leaveLobby() {
+    try { safeSend({ type: 'DISCONNECT', senderId: myId }); } catch (e) {}
+    try { intendedDisconnect = true; if (ws) ws.close(); } catch (e) {}
+    ws = null;
+    myId = null;
+    // keep username so input can be prefilled, but do not consider it joined
+    participants = {};
+    participantsList.innerHTML = '';
+    if (meLabel) meLabel.textContent = '未入室';
+    if (lobbyUserRow) lobbyUserRow.classList.add('hidden');
+    if (loginRow) loginRow.classList.remove('hidden');
+    log('ロビーから退出しました');
+  }
+  if (leaveLobbyBtn) leaveLobbyBtn.addEventListener('click', leaveLobby);
 
   // ゲーム画面制御
   function enterGameScreen() {
@@ -257,6 +363,7 @@
     gameScreen.classList.remove('hidden');
     // keep running=false until serve
     gameState.running = false;
+    try { document.body.classList.add('game-mode'); } catch (e) {}
   }
 
   function exitGameScreen() {
@@ -264,6 +371,8 @@
     gameScreen.classList.add('hidden');
     lobby.classList.remove('hidden');
     log('ロビーに戻りました');
+    try { document.body.classList.remove('game-mode'); } catch (e) {}
+    if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.remove('compact'); }
   }
 
   leaveBtn.addEventListener('click', () => {
@@ -310,14 +419,32 @@
     ctx.arc(gameState.ball.x, renderYForBall(gameState.ball.y), gameState.ball.r, 0, Math.PI*2);
     ctx.fill();
 
-    // Overlay: serve message if pending
-    if (servePending && currentRoom) {
+    // Overlay: serve message centered if pending and visible
+    if (servePending && serveMsgVisible && currentRoom) {
       const serveName = participants[serveId] ? participants[serveId].name : serveId;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(10, 10, 300, 36);
+      const text = `${serveName} のサーブです。`;
+      const w = gameCanvas.width;
+      const h = gameCanvas.height;
+      ctx.save();
+      ctx.font = 'bold 18px system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const textW = ctx.measureText(text).width;
+      const padX = 18;
+      const padY = 10;
+      const boxW = Math.min(w - 40, textW + padX * 2);
+      const boxH = 44;
+      const cx = w / 2;
+      const cy = h / 2;
+      const x = cx - boxW / 2;
+      const y = cy - boxH / 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(x, y, boxW, boxH);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.strokeRect(x, y, boxW, boxH);
       ctx.fillStyle = '#fff';
-      ctx.font = '16px sans-serif';
-      ctx.fillText(`最初は ${serveName} のサーブです。サーブ側はクリックで開始。`, 16, 34);
+      ctx.fillText(text, cx, cy);
+      ctx.restore();
     }
 
     // Scoreboard is drawn in DOM (outside canvas)
@@ -376,6 +503,7 @@
       scoreBotVal.textContent = '0';
       serveTop.classList.remove('active');
       serveBot.classList.remove('active');
+      if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
       return;
     }
 
@@ -409,6 +537,11 @@
         serveBot.classList.remove('active');
       }
     }
+    // Update emphasize class: only emphasize when serve message is visible
+    if (scorePanelEl) {
+      if (servePending && serveMsgVisible) { scorePanelEl.classList.add('serve'); scorePanelEl.classList.remove('compact'); }
+      else { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
+    }
   }
 
   function gameLoop() {
@@ -422,11 +555,15 @@
   let dragOffsetX = 0;
   function getCanvasX(e) {
     const rect = gameCanvas.getBoundingClientRect();
-    return ('clientX' in e) ? (e.clientX - rect.left) : (e.touches[0].clientX - rect.left);
+    const clientX = ('clientX' in e) ? e.clientX : e.touches[0].clientX;
+    const scaleX = gameCanvas.width / rect.width;
+    return (clientX - rect.left) * scaleX;
   }
   function getCanvasY(e) {
     const rect = gameCanvas.getBoundingClientRect();
-    return ('clientY' in e) ? (e.clientY - rect.top) : (e.touches[0].clientY - rect.top);
+    const clientY = ('clientY' in e) ? e.clientY : e.touches[0].clientY;
+    const scaleY = gameCanvas.height / rect.height;
+    return (clientY - rect.top) * scaleY;
   }
 
   gameCanvas.addEventListener('mousedown', (e) => {
@@ -434,7 +571,8 @@
     const y = getCanvasY(e);
     const p = (gameState.paddles && gameState.paddles[myId]) ? gameState.paddles[myId] : gameState.paddle || { x: (gameCanvas.width-100)/2, w:100, y: gameCanvas.height-40, h: 12 };
     const drawY = renderYForPaddle(p);
-    if (x >= p.x && x <= p.x + p.w && y >= drawY && y <= drawY + (p.h || 12)) {
+    const fudge = 24;
+    if (x >= p.x && x <= p.x + p.w && y >= drawY - fudge && y <= drawY + (p.h || 12) + fudge) {
       dragging = true;
       dragOffsetX = x - p.x;
     }
@@ -458,6 +596,11 @@
         lastSentX = sendX;
       }
     }
+    // If I'm the server and pre-serve, hide serve message on movement
+    if (servePending && serveMsgVisible && myId === serveId) {
+      serveMsgVisible = false;
+      if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
+    }
   });
 
   window.addEventListener('mouseup', () => { dragging = false; });
@@ -468,7 +611,8 @@
     const y = getCanvasY(e);
     const p = (gameState.paddles && gameState.paddles[myId]) ? gameState.paddles[myId] : gameState.paddle || { x: (gameCanvas.width-100)/2, w:100, y: gameCanvas.height-40, h: 12 };
     const drawY = renderYForPaddle(p);
-    if (x >= p.x && x <= p.x + p.w && y >= drawY && y <= drawY + (p.h || 12)) {
+    const fudge = 24;
+    if (x >= p.x && x <= p.x + p.w && y >= drawY - fudge && y <= drawY + (p.h || 12) + fudge) {
       dragging = true;
       dragOffsetX = x - (p ? p.x : 0);
     }
@@ -491,19 +635,47 @@
       }
     }
     e.preventDefault();
+    // Hide serve message when server paddle moves (mobile)
+    if (servePending && serveMsgVisible && myId === serveId) {
+      serveMsgVisible = false;
+      if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
+    }
   }, { passive: false });
 
-  // Serve on click: if servePending and I'm the server, send SERVE
-  gameCanvas.addEventListener('click', (e) => {
+  gameCanvas.addEventListener('touchend', () => {
+    const wasDragging = dragging;
+    dragging = false;
+    // Serve on touch release if pending and I'm the server
+    if (!wasDragging && servePending && currentRoom && myId === serveId) {
+      log('サーブを実行（タップ解放）');
+      safeSend({ type: 'SERVE', senderId: myId, payload: { roomId: currentRoom.roomId, fromId: myId } });
+      servePending = false;
+      serveMsgVisible = false;
+      if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
+    } else if (servePending && currentRoom && myId === serveId) {
+      // If user dragged paddle then released, still serve on release per request
+      log('サーブを実行（ドラッグ後のタップ解放）');
+      safeSend({ type: 'SERVE', senderId: myId, payload: { roomId: currentRoom.roomId, fromId: myId } });
+      servePending = false;
+      serveMsgVisible = false;
+      if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
+    }
+  }, { passive: true });
+  gameCanvas.addEventListener('touchcancel', () => { dragging = false; }, { passive: true });
+
+  // Serve on mouse release for desktop
+  gameCanvas.addEventListener('mouseup', () => {
     if (!servePending || !currentRoom) return;
     if (myId !== serveId) return; // only server can serve
-    log('サーブを実行（クリック検出）');
+    log('サーブを実行（マウス解放）');
     safeSend({ type: 'SERVE', senderId: myId, payload: { roomId: currentRoom.roomId, fromId: myId } });
-    // optimistic local flag; server will start running and broadcast GAME_STATE
     servePending = false;
+    serveMsgVisible = false;
+    if (scorePanelEl) { scorePanelEl.classList.remove('serve'); scorePanelEl.classList.add('compact'); }
   });
 
   // Initialization
+  initServerInfo();
   requestAnimationFrame(gameLoop);
 
   // Debug API
@@ -513,4 +685,3 @@
     getState: () => ({ myId, username, participants, currentRoom, serveId, servePending, gameState })
   };
 })();
-
