@@ -367,13 +367,24 @@
     ctx.restore();
   }
 
-  // Update DOM scoreboard based on current state
+  // Update scoreboard panel in DOM
   function updateScorePanel() {
-    if (!currentRoom || !currentRoom.players) return;
+    if (!currentRoom) {
+      scoreTopName.textContent = 'Opponent';
+      scoreBotName.textContent = 'You';
+      scoreTopVal.textContent = '0';
+      scoreBotVal.textContent = '0';
+      serveTop.classList.remove('active');
+      serveBot.classList.remove('active');
+      return;
+    }
+
+    // Determine top/bottom ids from room players and mirror setting
     const p0 = currentRoom.players[0];
     const p1 = currentRoom.players[1];
     const my = myId;
-    const opp = (my === p0) ? p1 : p0;
+    const opp = (p0 === my) ? p1 : p0;
+
     const topId = opp || p0;
     const bottomId = my || p1;
     const topName = (participants[topId] && participants[topId].name) ? participants[topId].name : (topId || '');
@@ -502,3 +513,4 @@
     getState: () => ({ myId, username, participants, currentRoom, serveId, servePending, gameState })
   };
 })();
+

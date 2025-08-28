@@ -25,11 +25,21 @@ npm install
 node server/index.js
 # または PORT を変更
 # PORT=8080 node server/index.js
+
+### シェルスクリプトで起動
+
+以下でも起動できます（デフォルト 3000、`-p` または `PORT` で上書き可）:
+
+```bash
+bin/start-server.sh           # 3000番ポート
+bin/start-server.sh -p 4000   # 明示ポート
+PORT=8080 bin/start-server.sh # 環境変数で指定
+```
 ```
 
 ブラウザで `http://localhost:3000` を開きます（ポートは `PORT` に合わせてください）。
 
-注: `npm start` は静的サーバ（http-server）用の定義で、WebSocketサーバが含まれません。必ず `node server/index.js` を使用してください。
+注: `npm start` はクライアントのみを `client/` から静的配信します（WebSocketサーバは含まれません）。ゲーム動作のためには必ず `node server/index.js` を使用してください。
 
 ---
 
@@ -62,9 +72,14 @@ node server/index.js
 
 ## フォルダ構成
 
-- `index.html` — ロビー＋ゲーム画面。スコアパネルをDOMで配置
-- `src/app.js` — クライアントロジック（WebSocket、描画、入力）
-- `server/index.js` — サーバ（Express + ws）。ルーム管理とゲームループ
+- `client/index.html` — ロビー＋ゲーム画面（UIシェル）
+- `client/app.js` — クライアントロジック（WebSocket、描画、入力）
+- `client/styles.css` — クライアントのスタイル
+- `server/index.js` — サーバ（Express + ws）/ WebSocketは`/ws`で待受。静的配信は `client/`
+- `tests/` — 診断・統合テスト
+  - `tests/test_lobby.js` — ロビー疎通のスモーク
+  - `tests/test_integration.js` — 2クライアント統合テスト
+- `logs/` — ローカルログ出力先（任意）。リポジトリからは除外
 - `spec.md` — 設計概要とメッセージ仕様
 - `tickets.md` — 詳細チケット/計画
 - `todo.md` — タスク一覧

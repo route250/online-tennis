@@ -1,5 +1,5 @@
 // Lobby diagnostic script
-// Usage: node scripts/test_lobby.js
+// Usage: node tests/test_lobby.js
 // Connects to ws://localhost:3000/ws, sends CONNECT and JOIN_LOBBY, logs received messages (PARTICIPANTS / CONNECT_ACK / others)
 
 const WebSocket = require('ws');
@@ -65,3 +65,4 @@ function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }
     console.error('WS error', err);
   });
 })();
+

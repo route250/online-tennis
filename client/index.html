@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>対戦型テニスゲーム - ロビー</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="lobby">
+    <h1>対戦型テニスゲーム — ロビー</h1>
+
+    <div>
+      <label>ユーザ名: <input id="username" placeholder="名前を入力"/></label>
+      <button id="enterLobby">ロビーに入る</button>
+    </div>
+
+    <div id="me" style="margin-top:10px; color:#555">未入室</div>
+
+    <h2 style="margin-top:16px">参加者（LAN）</h2>
+    <ul id="participants">
+      <!-- 動的に生成 -->
+    </ul>
+
+    <div id="logs" style="margin-top:12px; color:#666; font-size:13px"></div>
+  </div>
+
+  <div id="game" class="hidden">
+    <div id="gameLayout">
+      <canvas id="gameCanvas" width="500" height="700"></canvas>
+      <div id="sideColumn">
+        <div id="scorePanel" class="score-panel">
+          <div class="score-header">SCORE</div>
+          <div class="row top">
+            <span class="serve-dot" id="serveTop"></span>
+            <span class="name" id="scoreTopName">Opponent</span>
+            <span class="score" id="scoreTopVal">0</span>
+          </div>
+          <div class="divider"></div>
+          <div class="row bottom">
+            <span class="serve-dot" id="serveBot"></span>
+            <span class="name" id="scoreBotName">You</span>
+            <span class="score" id="scoreBotVal">0</span>
+          </div>
+        </div>
+        <div class="side-actions">
+          <button id="leaveGame">ロビーへ戻る</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

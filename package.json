@@ -4,9 +4,10 @@
   "private": true,
   "description": "対戦型テニスゲームのプロトタイプ（LANロビー＋簡易ゲーム）",
   "scripts": {
-    "start": "npx http-server . -p 8080",
-    "serve": "npx http-server . -p 8080",
-    "dev": "npx http-server . -p 8080",
+    "start": "npx http-server client -p 8080",
+    "serve": "npx http-server client -p 8080",
+    "dev": "npx http-server client -p 8080",
+    "server": "bash bin/start-server.sh",
     "test": "echo \"No tests\" && exit 0"
   },
   "author": "",

@@ -1,5 +1,5 @@
 // Integration test (node): simulate 2 WS clients, run invite/accept/serve flow and check GAME_STATE updates.
-// Usage: node scripts/test_integration.js
+// Usage: node tests/test_integration.js
 // Requires server running at ws://localhost:3000/ws
 
 const WebSocket = require('ws');
@@ -129,18 +129,9 @@ async function run() {
       }
       if (!roomId) return reject(new Error('Room not created'));
 
-      // Determine serveId: server sets players = [targetId, id] => players[0] == targetId == A? In our flow, target was bId, inviter aId,
-      // we sent INVITE from A->B, and B accepted; server sets players = [targetId, id] where targetId was aId? Wait server code: INVITE forwarded to target, INVITE_RESPONSE forwarded to targetId (original inviter).
-      // But in current server implementation, players = [targetId, id] where targetId is value from payload in INVITE_RESPONSE (targetId), and id is responder's id.
-      // Given we send INVITE with targetId=bId from A, then B receives it and we responded with targetId: aId (from B payload), so server creates players = [aId, bId].
-      // Therefore players[0] will be aId (invitee?), so choose serveId = players[0].
-      // To be safe, we'll try to serve from both clients if needed: prefer the one that matches players[0].
-
       // Wait a bit to ensure clients received ROOM_CREATED and initial GAME_STATE
       await wait(200);
 
-      // Decide who should send SERVE: we'll send SERVE from the player that is players[0].
-      // Since we don't have direct ROOM_CREATED payload here, try both with short delay: send SERVE from B first, then from A if no response.
       console.log('[Test] Attempting SERVE from B');
       b.send(JSON.stringify({ type: 'SERVE', senderId: bId, payload: { roomId } }));
 
@@ -150,8 +141,6 @@ async function run() {
       if (receivedRunningState) return;
       console.log('[Test] Attempting SERVE from A');
       a.send(JSON.stringify({ type: 'SERVE', senderId: aId, payload: { roomId } }));
-
-      // If still no running state, the orchestrator will wait for the main timer to expire
     };
 
     orchestrator().catch(reject);
@@ -172,3 +161,4 @@ async function run() {
 }
 
 run();
+

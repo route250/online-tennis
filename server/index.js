@@ -10,8 +10,8 @@ const WebSocket = require('ws');
 const PORT = process.env.PORT || 3000;
 
 const app = express();
-// Serve project root so client files (index.html, src/) are available
-app.use(express.static(path.join(__dirname, '..')));
+// Serve client assets from /client
+app.use(express.static(path.join(__dirname, '..', 'client')));
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
